@@ -1,7 +1,10 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-asyncpulse-default-secret-key')
@@ -22,11 +25,11 @@ INSTALLED_APPS = [
     # Third party apps
     'rest_framework',
     'django_celery_results',
+    'corsheaders',              # ← ADD
 
     # Local apps
     'core',
 ]
-
 AUTH_USER_MODEL = 'core.User'
 
 class LocalDevCorsMiddleware:
@@ -122,12 +125,36 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Celery Configuration
-CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
-CELERY_RESULT_BACKEND = 'django-db'
+# Celery Configuration
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+
+# ---------------------------------------------------------------------------
+# Email Configuration
+# ---------------------------------------------------------------------------
+# DEV: print emails to the terminal running the Celery worker.
+#       (No SMTP credentials needed — perfect for the pipeline test.)
+# PROD: set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+#       and provide the SMTP_* env vars below.
+# ---------------------------------------------------------------------------
+
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend',   # ← dev default
+)
+
+EMAIL_HOST          = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT          = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS       = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 't')
+EMAIL_HOST_USER     = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL  = os.getenv('DEFAULT_FROM_EMAIL', 'AsyncPulse <noreply@asyncpulse.local>')
 
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
@@ -138,8 +165,5 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     )
 }
-
-CELERY_BROKER_URL = os.getenv('REDIS_URL', os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0'))
-CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0'))
 
 
