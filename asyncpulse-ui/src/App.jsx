@@ -1,3 +1,16 @@
+// ============================================================================
+// ⚠️ PURANA APP.JSX — COMMENTED OUT
+// ============================================================================
+// Ye purana AsyncPulse webhook UI hai. Bulk email feature ke saath conflict
+// karta hai (different design system, alag API_BASE, alag layout).
+//
+// Future me agar ise wapas chahiye, to neeche wale code ko uncomment karo
+// aur naya code comment kar do.
+//
+// Chahiye to simply: naya App neeche comment karo, purana uncomment karo.
+// ============================================================================
+
+/*
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
@@ -419,5 +432,28 @@ export default function App() {
         </section>
       </main>
     </div>
+  );
+}
+*/
+
+// ============================================================================
+// ✅ NAYA APP.JSX — BULK EMAIL UI (Active)
+// ============================================================================
+
+import Sidebar from './components/Sidebar';
+import BulkEmailPage from './pages/BulkEmailPage';
+import { ToastProvider } from './components/Toast';
+import './App.css';
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <div className="flex min-h-screen bg-bg">
+        <Sidebar />
+        <main className="flex-1 overflow-x-hidden">
+          <BulkEmailPage />
+        </main>
+      </div>
+    </ToastProvider>
   );
 }
