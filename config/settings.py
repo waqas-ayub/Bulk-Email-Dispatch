@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 from pathlib import Path
 
@@ -24,6 +25,7 @@ INSTALLED_APPS = [
 
     # Third party apps
     'rest_framework',
+    'rest_framework_simplejwt',
     'django_celery_results',
     'corsheaders',              # ← ADD
 
@@ -166,4 +168,10 @@ REST_FRAMEWORK = {
     )
 }
 
-
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}

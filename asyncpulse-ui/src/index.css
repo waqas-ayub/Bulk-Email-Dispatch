@@ -66,10 +66,25 @@
     @apply bg-bg-elevated border border-white/5 rounded-2xl backdrop-blur-sm;
   }
 
-  /* Input base */
   .input-base {
     @apply w-full bg-bg-elevated border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30
            focus:border-primary/50 focus:ring-2 focus:ring-primary/30 transition-all duration-200 outline-none;
+    color-scheme: dark;
+  }
+  
+  .input-base:-webkit-autofill,
+  .input-base:-webkit-autofill:hover,
+  .input-base:-webkit-autofill:focus,
+  textarea.input-base {
+    -webkit-text-fill-color: white !important;
+    -webkit-box-shadow: 0 0 0px 1000px #1e1e28 inset !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+  
+  /* Dark textarea */
+  textarea {
+    background-color: #1e1e28 !important;
+    color: white !important;
   }
 
   /* Button base */

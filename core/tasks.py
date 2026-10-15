@@ -3,20 +3,20 @@ import requests
 from celery import shared_task
 from django_celery_results.models import TaskResult
 from django.utils import timezone
-from django.core.mail import send_mass_mail
+from django.core.mail import send_mass_mail, get_connection
 from django.conf import settings
 from datetime import timedelta
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 
 @shared_task(
-    bind=True,
+    bind=True, 
     max_retries=3,
     default_retry_delay=5,
     autoretry_for=(requests.RequestException, Exception),
     retry_backoff=True,
-    rate_limit='10/m',  # Maximum 10 tasks per minute
+    rate_limit='10/m',
 )
 def send_webhook_notification(self, target_url, payload):
     """
@@ -51,7 +51,7 @@ def cleanup_old_task_results(days=7):
 
 
 # ---------------------------------------------------------------------------
-# NEW: Bulk Email Dispatching
+# BULK EMAIL DISPATCHING
 # ---------------------------------------------------------------------------
 @shared_task(
     bind=True,
@@ -60,18 +60,17 @@ def cleanup_old_task_results(days=7):
     retry_backoff=True,
     retry_backoff_max=120,
     retry_jitter=True,
-    rate_limit='5/m',   # dev me Gmail throttle se bachne ke liye
+    rate_limit='5/m',
 )
-def send_bulk_emails_task(self, email_list, subject, message):
+def send_bulk_emails_task(self, email_list, subject, message, sender_id=None):
     """
-    Send a bulk email to a list of recipients using send_mass_mail.
-
-    send_mass_mail ek hi SMTP connection kholta hai aur sab recipients ke
-    liye reuse karta hai — loop me send_mail() se kaafi faster.
-
-    Kisi bhi exception pe retry karega with exponential backoff.
+    Send a bulk email using the SELECTED SENDER'S OWN SMTP credentials.
+    
+    - sender_id REQUIRED hai
+    - Har sender ke apne SMTP credentials use honge
+    - Nahi hai to FAIL hoga (default .env SMTP use NAHI hoga)
     """
-    # ---- 1. Validate input ------------------------------------------------
+    # ---- 1. Validate input ----
     if not email_list or not isinstance(email_list, list):
         logger.warning("send_bulk_emails_task called with empty/invalid email_list")
         return {"status": "SKIPPED", "reason": "email_list must be a non-empty list"}
@@ -80,11 +79,37 @@ def send_bulk_emails_task(self, email_list, subject, message):
         logger.warning("send_bulk_emails_task called without subject or message")
         return {"status": "SKIPPED", "reason": "subject and message are required"}
 
-    from_email = settings.DEFAULT_FROM_EMAIL
+    # ---- 2. Resolve sender (REQUIRED) ----
+    from core.models import Sender
 
-    # ---- 2. Build datatuples ----------------------------------------------
-    # send_mass_mail ko har email ke liye ye tuple chahiye:
-    #   (subject, message, from_email, [recipient_list])
+    if not sender_id:
+        logger.error("send_bulk_emails_task called without sender_id. Rejecting.")
+        return {
+            "status": "FAILED",
+            "reason": "No sender selected. Please choose a sender before sending.",
+        }
+
+    try:
+        sender = Sender.objects.get(id=sender_id, status='approved')
+    except Sender.DoesNotExist:
+        logger.error(f"Sender {sender_id} not found or not approved.")
+        return {
+            "status": "FAILED",
+            "reason": f"Sender {sender_id} not found or not approved.",
+        }
+    except Exception as e:
+        logger.error(f"Error loading sender {sender_id}: {e}")
+        return {
+            "status": "FAILED",
+            "reason": f"Error loading sender: {e}",
+        }
+
+    # Sender's own SMTP credentials
+    from_email = f"{sender.display_name} <{sender.email}>"
+    logger.info(f"Using sender: {from_email}")
+    logger.info(f"SMTP: {sender.smtp_host}:{sender.smtp_port} (user: {sender.smtp_username})")
+
+    # ---- 3. Build datatuples ----
     datatuples = [
         (subject, message, from_email, [addr.strip()])
         for addr in email_list
@@ -102,18 +127,31 @@ def send_bulk_emails_task(self, email_list, subject, message):
         subject,
     )
 
-    # ---- 3. Send ----------------------------------------------------------
+    # ---- 4. Send using SENDER'S OWN SMTP connection ----
     try:
-        sent_count = send_mass_mail(datatuples, fail_silently=False)
+        connection = get_connection(
+            backend='django.core.mail.backends.smtp.EmailBackend',
+            host=sender.smtp_host,
+            port=sender.smtp_port,
+            username=sender.smtp_username,
+            password=sender.smtp_password,
+            use_tls=sender.use_tls,
+            use_ssl=sender.use_ssl,
+            fail_silently=False,
+            timeout=30,
+        )
+
+        sent_count = send_mass_mail(datatuples, fail_silently=False, connection=connection)
         logger.info("Bulk email delivered to %s recipients", sent_count)
+
         return {
             "status": "SUCCESS",
             "recipients": len(datatuples),
             "sent": sent_count,
             "subject": subject,
+            "from_email": from_email,
         }
 
     except Exception as exc:
         logger.exception("Bulk email dispatch failed: %s", exc)
-        # Exponential backoff; 3 retries ke baad give up (total 4 attempts)
         raise self.retry(exc=exc)

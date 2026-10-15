@@ -21,13 +21,18 @@ export class ApiError extends Error {
 
 /**
  * Generic fetch wrapper with JSON handling and error parsing.
+ * Automatically attaches JWT token from localStorage.
  */
 async function apiFetch(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
 
+  // Get JWT token from localStorage (saved by AuthContext)
+  const token = localStorage.getItem('asyncpulse_access_token');
+
   const config = {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...options.headers,
     },
     ...options,
@@ -75,28 +80,21 @@ async function apiFetch(endpoint, options = {}) {
 
 /**
  * Queue a bulk email dispatch task.
- *
- * @param {string[]} emailList - Array of recipient email addresses
- * @param {string} subject - Email subject line
- * @param {string} message - Email body
- * @returns {Promise<{message: string, task_id: string, recipients: number, status_check_url: string}>}
  */
-export async function sendBulkEmail(emailList, subject, message) {
+export async function sendBulkEmail(emailList, subject, message, senderId = null) {
   return apiFetch('/send-bulk-email/', {
     method: 'POST',
     body: JSON.stringify({
       email_list: emailList,
       subject,
       message,
+      sender_id: senderId,
     }),
   });
 }
 
 /**
  * Poll the status of an async task.
- *
- * @param {string} taskId - UUID of the Celery task
- * @returns {Promise<{task_id: string, status: string, result: any, error: string|null}>}
  */
 export async function getTaskStatus(taskId) {
   return apiFetch(`/task-status/${taskId}/`, {
@@ -105,7 +103,7 @@ export async function getTaskStatus(taskId) {
 }
 
 /**
- * Task status constants for consistent referencing.
+ * Task status constants.
  */
 export const TaskStatus = {
   PENDING: 'PENDING',
@@ -115,16 +113,10 @@ export const TaskStatus = {
   RETRY: 'RETRY',
 };
 
-/**
- * Helper: check if a task status is terminal (finished).
- */
 export function isTerminalStatus(status) {
   return status === TaskStatus.SUCCESS || status === TaskStatus.FAILURE;
 }
 
-/**
- * Helper: validate an email address (basic RFC-ish check).
- */
 export function isValidEmail(email) {
   if (!email || typeof email !== 'string') return false;
   const trimmed = email.trim();
@@ -133,9 +125,6 @@ export function isValidEmail(email) {
   return regex.test(trimmed);
 }
 
-/**
- * Helper: parse comma/newline/semicolon-separated email input into a clean array.
- */
 export function parseEmailInput(input) {
   if (!input) return [];
   return input
@@ -144,9 +133,6 @@ export function parseEmailInput(input) {
     .filter(Boolean);
 }
 
-/**
- * Helper: deduplicate an array of emails (case-insensitive).
- */
 export function dedupeEmails(emails) {
   const seen = new Set();
   return emails.filter((email) => {
@@ -154,5 +140,35 @@ export function dedupeEmails(emails) {
     if (seen.has(lower)) return false;
     seen.add(lower);
     return true;
+  });
+}
+
+// ============================================================================
+// SENDER MANAGEMENT
+// ============================================================================
+
+export async function getSenders() {
+  return apiFetch('/senders/', { method: 'GET' });
+}
+
+export async function getApprovedSenders() {
+  return apiFetch('/senders/approved/', { method: 'GET' });
+}
+
+export async function createSender(data) {
+  return apiFetch('/senders/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function approveSender(senderId) {
+  return apiFetch(`/senders/${senderId}/approve/`, { method: 'POST' });
+}
+
+export async function rejectSender(senderId, reason = '') {
+  return apiFetch(`/senders/${senderId}/reject/`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
 }

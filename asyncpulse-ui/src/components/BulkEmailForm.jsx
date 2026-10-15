@@ -16,6 +16,7 @@ import {
   isValidEmail,
 } from '../api/bulkEmail';
 import { useToast } from './Toast';
+import SenderSelect from './SenderSelect';
 
 const SUBJECT_MAX = 200;
 const MESSAGE_MAX = 5000;
@@ -27,6 +28,7 @@ export default function BulkEmailForm({ onTaskQueued }) {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [selectedSender, setSelectedSender] = useState(null);
   const subjectRef = useRef(null);
   const messageRef = useRef(null);
 
@@ -40,12 +42,13 @@ export default function BulkEmailForm({ onTaskQueued }) {
   }, [emailsInput]);
 
   const isValid =
-    validEmails.length > 0 &&
-    validEmails.length <= 500 &&
-    subject.trim().length > 0 &&
-    subject.length <= SUBJECT_MAX &&
-    message.trim().length > 0 &&
-    message.length <= MESSAGE_MAX;
+  selectedSender !== null &&
+  validEmails.length > 0 &&
+  validEmails.length <= 500 &&
+  subject.trim().length > 0 &&
+  subject.length <= SUBJECT_MAX &&
+  message.trim().length > 0 &&
+  message.length <= MESSAGE_MAX;
 
   // Cmd/Ctrl+Enter submit
   useEffect(() => {
@@ -67,6 +70,7 @@ export default function BulkEmailForm({ onTaskQueued }) {
 
   const handleSubmit = async () => {
     const errors = {};
+    if (!selectedSender) errors.sender = 'Please select a sender.';
     if (validEmails.length === 0) errors.emails = 'Add at least one valid email.';
     if (validEmails.length > 500) errors.emails = 'Max 500 recipients per request.';
     if (!subject.trim()) errors.subject = 'Subject is required.';
@@ -83,13 +87,17 @@ export default function BulkEmailForm({ onTaskQueued }) {
     setFieldErrors({});
     setSubmitting(true);
     try {
-      const response = await sendBulkEmail(validEmails, subject.trim(), message.trim());
+      const response = await sendBulkEmail(
+        validEmails,
+        subject.trim(),
+        message.trim(),
+        selectedSender?.id
+      );
       toast.success(
         `Task queued for ${response.recipients} recipient${response.recipients > 1 ? 's' : ''}.`,
         'Bulk email dispatched'
       );
       onTaskQueued?.(response);
-      // Reset form (keep subject/message for iteration)
       setEmailsInput('');
     } catch (err) {
       toast.error(err.message || 'Failed to queue task.', 'Error');
@@ -114,6 +122,9 @@ export default function BulkEmailForm({ onTaskQueued }) {
           </p>
         </div>
       </div>
+
+      {/* Sender Select */}
+      <SenderSelect value={selectedSender} onChange={setSelectedSender} />
 
       {/* Recipients */}
       <div className="mb-5">
@@ -255,7 +266,7 @@ export default function BulkEmailForm({ onTaskQueued }) {
             ) : (
               <>
                 <Send className="w-4 h-4" />
-                Send Bulk Email
+                Send  
               </>
             )}
           </button>
@@ -318,4 +329,4 @@ function FieldError({ children }) {
       {children}
     </p>
   );
-}
+} 
